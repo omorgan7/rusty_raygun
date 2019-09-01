@@ -1,0 +1,7 @@
+[package]
+name = "rusty_raygun"
+version = "0.1.0"
+authors = ["Owen Morgan <omorgan7@me.com>"]
+
+[dependencies]
+num = "0.2.0"
