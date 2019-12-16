@@ -24,7 +24,7 @@ impl Vector3 {
         self.x * with.x + self.y * with.y + self.z * with.z
     }
 
-    pub fn cross(&self, with : &Vector3) -> Vector3 {
+    pub fn cross(&self, with : Vector3) -> Vector3 {
         let first  = self.y * with.z - self.z * with.y;
         let second = self.z * with.x - self.x * with.z;
         let third  = self.x * with.y - self.y * with.x;

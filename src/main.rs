@@ -50,7 +50,7 @@ impl Camera {
         let forward = (camera_origin - look_at).normalised();
         
         let up = look_up.normalised();
-        let left = up.cross(&forward).normalised();
+        let left = up.cross(forward).normalised();
 
         let image_plane_center = camera_origin - forward * focal_length;
         let image_plane_edge = image_plane_center + left * pixel_width * 0.5 + up * pixel_height * 0.5;
@@ -65,6 +65,23 @@ impl Camera {
     }
 }
 
+struct RayHit {
+    ray_length : f32,
+    intersection_point : Vector3
+}
+
+impl RayHit {
+    fn new(ray_length: f32, ray_origin : Vector3, ray_direction: Vector3) -> RayHit {
+        let intersection_point = ray_origin + ray_direction * ray_length;
+
+        RayHit{ray_length, intersection_point}
+    }
+
+    fn from_intersection(ray_length: f32, intersection_point: Vector3) -> RayHit {
+        RayHit{ray_length, intersection_point}
+    }
+}
+
 #[derive(Clone)]
 struct Sphere {
     origin : Vector3,
@@ -74,10 +91,94 @@ struct Sphere {
     specularity : f32
 }
 
-struct Scene
-{
+struct Scene {
     sun_origin : Vector3,
-    objects : [Sphere; 5]
+    objects : [Triangle; 1]
+}
+
+#[derive(Clone)]
+struct Triangle {
+    vertices : [Vector3; 3],
+    normal : Vector3,
+    edge_ba : Vector3,
+    edge_cb : Vector3,
+    edge_ac : Vector3,
+    colour : Vector3,
+    plane_offset : f32,
+    diffuseness : f32,
+    specularity : f32
+}
+
+impl Triangle {
+    fn new(vertices : [Vector3; 3], colour : Vector3, diffuseness : f32, specularity : f32) -> Triangle {
+        let a = vertices[0];
+        let b = vertices[1];
+        let c = vertices[2];
+
+        let edge_ba = b - a;
+        let edge_cb = c - b;
+        let edge_ac = a - c;
+
+        let normal = edge_ba.cross(-edge_ac).normalised();
+
+        let plane_offset = normal.dot(&a);
+
+        Triangle {
+            vertices: vertices,
+            normal: normal,
+            edge_ba: edge_ba,
+            edge_cb: edge_cb,
+            edge_ac: edge_ac,
+            colour : colour,
+            plane_offset: plane_offset,
+            diffuseness : diffuseness,
+            specularity : specularity
+        }
+    }
+
+    fn trace(&self, ray_origin: Vector3, ray_direction: Vector3) -> Option<RayHit> {
+        let normal_direction = self.normal.dot(&ray_direction);
+
+        println!("{} {} {} {} {} {}", self.normal.x, self.normal.y, self.normal.z, ray_direction.x, ray_direction.y, ray_direction.z);
+        if normal_direction > 0.0 {
+            
+            // println!("Rejected normal");
+            return None;
+        }
+
+        let normal_origin = self.normal.dot(&ray_origin);
+
+        let ray_length = (self.plane_offset - normal_origin) / normal_direction;
+
+        if ray_length < 0.0 {
+            // println!("Rejected raylength");
+            return None;
+        }
+
+        // check three edge conditions now:
+        let intersection_point = ray_origin + ray_direction * ray_length;
+
+        let edge_ba_bounds : f32 = (self.edge_ba.cross(intersection_point - self.vertices[0])).dot(&self.normal);
+        if edge_ba_bounds < 0.0 {
+            // println!("Rejected test1");
+            return None;
+        }
+
+        let edge_cb_bounds : f32 = (self.edge_cb.cross(intersection_point - self.vertices[1])).dot(&self.normal);
+        if edge_cb_bounds < 0.0 {
+            // println!("Rejected test2");
+            return None;
+        }
+
+        let edge_ac_bounds : f32 = (self.edge_ac.cross(intersection_point - self.vertices[2])).dot(&self.normal);
+        if edge_ac_bounds < 0.0 {
+            // println!("Rejected test3");
+            return None;
+        }
+
+        Some(RayHit::from_intersection(ray_length, intersection_point))
+    }
+
 }
 
 impl Sphere {
@@ -90,28 +191,29 @@ impl Sphere {
 
     fn colour(&self, ray_direction: Vector3, hit_position: Vector3, scene: &Scene) -> Vector3 {
 
-        let ray_direction = (scene.sun_origin - hit_position).normalised();
+        // let ray_direction = (scene.sun_origin - hit_position).normalised();
 
-        for sphere in scene.objects.iter() {
-            let self_ptr = self as *const Sphere;
-            let sphere_ptr = sphere as *const Sphere;
+        // for sphere in scene.objects.iter() {
+        //     let self_ptr = self as *const Triangle;
+        //     let sphere_ptr = sphere as *const Triangle;
 
-            if self_ptr == sphere_ptr {
-                continue;
-            }
+        //     if self_ptr == sphere_ptr {
+        //         continue;
+        //     }
 
-            if let Some(ray_length) = sphere.trace(hit_position, ray_direction) {
-                return self.ambient_colour();
-            }
-        }
+        //     if let Some(_) = sphere.trace(hit_position, ray_direction) {
+        //         return self.ambient_colour();
+        //     }
+        // }
 
-        let surface_normal = (hit_position - self.origin).normalised();
-        let diffuse_response = surface_normal.dot(&ray_direction);
+        // let surface_normal = (hit_position - self.origin).normalised();
+        // let diffuse_response = surface_normal.dot(&ray_direction);
         
-        Vector3::ones() * diffuse_response + self.ambient_colour()
+        // Vector3::ones() * diffuse_response + self.ambient_colour()
+        Vector3::ones()
     }
 
-    fn trace(&self, ray_origin: Vector3, ray_direction: Vector3) -> Option<f32> {
+    fn trace(&self, ray_origin: Vector3, ray_direction: Vector3) -> Option<RayHit> {
         // Test intersection.
         // we are testing: || ray_origin - Sphere_origin ||^2 > (d . (ray_origin - Sphere_origin))^2 + r^2 
 
@@ -130,57 +232,62 @@ impl Sphere {
         let second_part = (projection_squared + radius_squared - origin_difference_length_squared).sqrt();
         let ray_length = if projection < 0.0 { -projection - second_part } else { -projection + second_part };
 
-        return if ray_length < 0.0 { None } else { Some(ray_length) };
+        return if ray_length < 0.0 { None } else { Some(RayHit::new(ray_length, ray_origin, ray_direction)) };
     }
 }
 
 impl Scene {
     fn new() -> Scene {
-        let spheres = [
-            Sphere {
-                origin: Vector3{x: 0.0, y: -3.0, z: 0.0},
-                colour: Vector3{x: 0.8, y: 0.8, z: 0.0},
-                radius: 1.0,
-                diffuseness: 0.7,
-                specularity: 0.1,
-            },
-            Sphere {
-                origin: Vector3{x: 1.0, y: 1.0, z: 10.0},
-                colour: Vector3{x: 0.2, y: 0.7, z: 0.1},
-                radius: 6.0,
-                diffuseness: 0.7,
-                specularity: 0.1,
-            },
-            Sphere {
-                origin: Vector3{x: 3.0, y: -4.0, z: 2.0},
-                colour: Vector3{x: 0.5, y: 0.4, z: 0.2},
-                radius: 1.4,
-                diffuseness: 0.7,
-                specularity: 0.1,
-            },
-            Sphere {
-                origin: Vector3{x: -4.0, y: 6.0, z: -1.0},
-                colour: Vector3{x: 0.1, y: 0.5, z: 0.15},
-                radius: 3.2,
-                diffuseness: 0.7,
-                specularity: 0.1,
-            },
-            Sphere {
-                origin: Vector3{x: 5.0, y: 1.0, z: 0.5},
-                colour: Vector3{x: 0.7, y: 0.2, z: 0.5},
-                radius: 0.6,
-                diffuseness: 0.7,
-                specularity: 0.1,
-            }
+        let vertices : [Vector3; 3] = [Vector3{x: 0.0, y: 1.0, z: 0.0}, Vector3{x: 1.0, y: 0.0, z: 0.0}, Vector3{x: -1.0, y: -1.0, z: 0.0}];
+        let colour = Vector3{x: 0.8, y: 0.8, z: 0.0};
+        let triangles = [
+            Triangle::new(vertices, colour, 0.7, 0.1)
         ];
+        // let spheres = [
+        //     Sphere {
+        //         origin: Vector3{x: 0.0, y: -3.0, z: 0.0},
+        //         colour: Vector3{x: 0.8, y: 0.8, z: 0.0},
+        //         radius: 1.0,
+        //         diffuseness: 0.7,
+        //         specularity: 0.1,
+        //     },
+        //     Sphere {
+        //         origin: Vector3{x: 1.0, y: 1.0, z: 10.0},
+        //         colour: Vector3{x: 0.2, y: 0.7, z: 0.1},
+        //         radius: 6.0,
+        //         diffuseness: 0.7,
+        //         specularity: 0.1,
+        //     },
+        //     Sphere {
+        //         origin: Vector3{x: 3.0, y: -4.0, z: 2.0},
+        //         colour: Vector3{x: 0.5, y: 0.4, z: 0.2},
+        //         radius: 1.4,
+        //         diffuseness: 0.7,
+        //         specularity: 0.1,
+        //     },
+        //     Sphere {
+        //         origin: Vector3{x: -4.0, y: 6.0, z: -1.0},
+        //         colour: Vector3{x: 0.1, y: 0.5, z: 0.15},
+        //         radius: 3.2,
+        //         diffuseness: 0.7,
+        //         specularity: 0.1,
+        //     },
+        //     Sphere {
+        //         origin: Vector3{x: 5.0, y: 1.0, z: 0.5},
+        //         colour: Vector3{x: 0.7, y: 0.2, z: 0.5},
+        //         radius: 0.6,
+        //         diffuseness: 0.7,
+        //         specularity: 0.1,
+        //     }
+        // ];
 
-        Scene{sun_origin: Vector3{x: 2.0, y: -2.0, z: -4.0}, objects: spheres}
+        Scene{sun_origin: Vector3{x: 2.0, y: -2.0, z: -4.0}, objects: triangles}
     }
 }
 
 fn main() {
-    let width = 1280;
-    let height = 720;
+    let width = 6;
+    let height = 6;
     let channels = 3;
 
     let field_of_view : f32 = 90.0;
@@ -211,24 +318,22 @@ fn main() {
         let ray_direction = (camera.image_plane_edge - camera.left * normalised_width * x + camera.image_plane_center - camera.up * normalised_height * y - camera.origin).normalised();
 
         let mut max_dist = INFINITY;
-        let mut object_hit : Option<(&Sphere, f32)> = None;
+        let mut object_hit : Option<(&Triangle, Vector3)> = None;
 
 
         for sphere in scene.objects.iter() {
-            if let Some(ray_length) = sphere.trace(camera.origin, ray_direction) {
+            if let Some(ray_hit) = sphere.trace(camera.origin, ray_direction) {
 
-                if ray_length < max_dist {
-                    max_dist = ray_length;
-                    object_hit = Some((&sphere, ray_length));
+                if ray_hit.ray_length < max_dist {
+                    max_dist = ray_hit.ray_length;
+                    object_hit = Some((&sphere, ray_hit.intersection_point));
                 }
             }
         }
 
         let mut colour = Vector3::zeroes();
-        if let Some((sphere, ray_length)) = object_hit {
-            
-            let intersection_point = camera.origin + ray_direction * ray_length;
-            colour = sphere.colour(ray_direction, intersection_point, &scene);
+        if let Some((sphere, intersection_point)) = object_hit {
+            colour = sphere.colour;//(ray_direction, intersection_point, &scene);
         }
 
         let (r, g, b) = colour.to_rgb();
