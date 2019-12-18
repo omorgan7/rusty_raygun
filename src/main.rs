@@ -82,6 +82,11 @@ impl RayHit {
     }
 }
 
+trait Traceable {
+    fn trace(&self, ray_origin: Vector3, ray_direction: Vector3) -> Option<RayHit>;
+    fn colour(&self, ray_direction: Vector3, hit_position: Vector3, scene: &Scene, objects: &[&dyn Traceable]) -> Vector3;
+}
+
 #[derive(Clone)]
 struct Sphere {
     origin : Vector3,
@@ -93,7 +98,8 @@ struct Sphere {
 
 struct Scene {
     sun_origin : Vector3,
-    objects : [Triangle; 1]
+    spheres: Vec<Sphere>,
+    triangles: Vec<Triangle>,
 }
 
 #[derive(Clone)]
@@ -135,6 +141,10 @@ impl Triangle {
             specularity : specularity
         }
     }
+
+}
+
+impl Traceable for Triangle {
 
     fn trace(&self, ray_origin: Vector3, ray_direction: Vector3) -> Option<RayHit> {
         let normal_direction = self.normal.dot(&ray_direction);
@@ -212,6 +222,9 @@ impl Sphere {
         // Vector3::ones() * diffuse_response + self.ambient_colour()
         Vector3::ones()
     }
+}
+
+impl Traceable for Sphere {
 
     fn trace(&self, ray_origin: Vector3, ray_direction: Vector3) -> Option<RayHit> {
         // Test intersection.
@@ -368,6 +381,9 @@ fn main() {
 
     let scene = Scene::new();
 
+    let mut objects = Vec::new();
+    scene.triangles.iter().for_each(| tri | objects.push(tri as &dyn Traceable));
+    scene.spheres.iter().for_each(| s | objects.push(s as &dyn Traceable));
 
     for pixel_count in (0..(width * height * channels)).step_by(channels) {
         let x = ((pixel_count / channels) % width) as f32;
@@ -376,22 +392,21 @@ fn main() {
         let ray_direction = (camera.image_plane_edge - camera.left * normalised_width * x + camera.image_plane_center - camera.up * normalised_height * y - camera.origin).normalised();
 
         let mut max_dist = INFINITY;
-        let mut object_hit : Option<(&Triangle, Vector3)> = None;
+        let mut object_hit : Option<(&dyn Traceable, Vector3)> = None;
 
 
-        for sphere in scene.objects.iter() {
-            if let Some(ray_hit) = sphere.trace(camera.origin, ray_direction) {
-
+        for object in objects.iter() {
+            if let Some(ray_hit) = object.trace(camera.origin, ray_direction) {
                 if ray_hit.ray_length < max_dist {
                     max_dist = ray_hit.ray_length;
-                    object_hit = Some((&sphere, ray_hit.intersection_point));
+                    object_hit = Some((*object, ray_hit.intersection_point));
                 }
             }
         }
 
         let mut colour = Vector3::zeroes();
-        if let Some((sphere, intersection_point)) = object_hit {
-            colour = sphere.colour;//(ray_direction, intersection_point, &scene);
+        if let Some((object, intersection_point)) = object_hit {
+            colour = object.colour(ray_direction, intersection_point, &scene, &objects);
         }
 
         let (r, g, b) = colour.to_rgb();
