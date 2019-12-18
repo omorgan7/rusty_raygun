@@ -361,7 +361,7 @@ fn main() {
     let (pixel_width, pixel_height) = pixel_sizes(width as i32, height as i32, field_of_view, focal_length);
 
     let world_origin = Vector3{x: 0.0, y: 0.0, z: 0.0};
-    let camera_origin = Vector3{x: 0.0, y: 0.0, z: -10.0};
+    let camera_origin = Vector3{x: 0.0, y: -7.0, z: -19.9};
     let camera_look_at = world_origin;
     let camera_look_up = Vector3{x: 0.0, y: 1.0, z: 0.0};
 
