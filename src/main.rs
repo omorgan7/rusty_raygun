@@ -234,64 +234,122 @@ impl Sphere {
 
         return if ray_length < 0.0 { None } else { Some(RayHit::new(ray_length, ray_origin, ray_direction)) };
     }
+
+    fn colour(&self, ray_direction: Vector3, hit_position: Vector3, scene: &Scene, objects: &[&dyn Traceable]) -> Vector3 {
+
+        let shadow =  -(hit_position - scene.sun_origin);
+        let ray_direction = shadow.normalised();
+        let ray_length = shadow.length();
+
+        for object in objects.iter() {
+            let self_ptr = self as *const Sphere as *const usize;
+            let object_ptr = *object as *const dyn Traceable as *const usize;
+
+            if self_ptr == object_ptr {
+                continue;
+            }
+
+            let eps : f32 = 1e-2;
+
+            if let Some(hit) = object.trace(hit_position, ray_direction) {
+                if hit.ray_length + eps < ray_length {
+                    return self.ambient_colour();
+                }
+            }
+        }
+
+        let surface_normal = (hit_position - self.origin).normalised();
+        let diffuse_response = surface_normal.dot(&ray_direction);
+        if (diffuse_response < 0.0) {
+            return self.ambient_colour()
+        }
+        Vector3::ones() * diffuse_response * self.diffuseness + self.ambient_colour()
+    }
+}
+
+impl Sphere {
+    fn ambient_colour(&self) -> Vector3 {
+        let ambient_coefficient = 1.0 - self.diffuseness - self.specularity;
+
+        self.colour * ambient_coefficient
+    }
 }
 
 impl Scene {
     fn new() -> Scene {
-        let vertices : [Vector3; 3] = [Vector3{x: 0.0, y: 1.0, z: 0.0}, Vector3{x: 1.0, y: 0.0, z: 0.0}, Vector3{x: -1.0, y: -1.0, z: 0.0}];
-        let colour = Vector3{x: 0.8, y: 0.8, z: 0.0};
-        let triangles = [
-            Triangle::new(vertices, colour, 0.7, 0.1)
-        ];
-        // let spheres = [
-        //     Sphere {
-        //         origin: Vector3{x: 0.0, y: -3.0, z: 0.0},
-        //         colour: Vector3{x: 0.8, y: 0.8, z: 0.0},
-        //         radius: 1.0,
-        //         diffuseness: 0.7,
-        //         specularity: 0.1,
-        //     },
-        //     Sphere {
-        //         origin: Vector3{x: 1.0, y: 1.0, z: 10.0},
-        //         colour: Vector3{x: 0.2, y: 0.7, z: 0.1},
-        //         radius: 6.0,
-        //         diffuseness: 0.7,
-        //         specularity: 0.1,
-        //     },
-        //     Sphere {
-        //         origin: Vector3{x: 3.0, y: -4.0, z: 2.0},
-        //         colour: Vector3{x: 0.5, y: 0.4, z: 0.2},
-        //         radius: 1.4,
-        //         diffuseness: 0.7,
-        //         specularity: 0.1,
-        //     },
-        //     Sphere {
-        //         origin: Vector3{x: -4.0, y: 6.0, z: -1.0},
-        //         colour: Vector3{x: 0.1, y: 0.5, z: 0.15},
-        //         radius: 3.2,
-        //         diffuseness: 0.7,
-        //         specularity: 0.1,
-        //     },
-        //     Sphere {
-        //         origin: Vector3{x: 5.0, y: 1.0, z: 0.5},
-        //         colour: Vector3{x: 0.7, y: 0.2, z: 0.5},
-        //         radius: 0.6,
-        //         diffuseness: 0.7,
-        //         specularity: 0.1,
-        //     }
-        // ];
 
-        Scene{sun_origin: Vector3{x: 2.0, y: -2.0, z: -4.0}, objects: triangles}
+        let vertices : [[Vector3; 3]; 12] = [
+            [Vector3{x: 10.0,  y: -10.0,  z: 10.0}, Vector3{x: -10.0, y: -10.0, z: 10.0},  Vector3{x: -10.0,  y: 10.0, z: 10.0}],
+            [Vector3{x: 10.0,  y: -10.0,  z: 10.0}, Vector3{x: -10.0, y: 10.0, z: 10.0},  Vector3{x: 10.0,  y: 10.0, z: 10.0}],
+            [Vector3{x: -10.0, y: 10.0, z: 10.0}, Vector3{x: -10.0,  y: -10.0,  z: 10.0}, Vector3{x: -10.0,  y: -10.0, z: -10.0}],
+            [Vector3{x: 10.0,  y: -10.0,  z: 10.0}, Vector3{x: 10.0, y: 10.0, z: 10.0}, Vector3{x: 10.0,  y: -10.0, z: -10.0}],
+            [Vector3{x: 10.0,  y: 10.0,  z: 10.0}, Vector3{x: 10.0, y: 10.0, z: -10.0}, Vector3{x: 10.0,  y: -10.0, z: -10.0}],
+            [Vector3{x: -10.0, y: 10.0, z: -10.0}, Vector3{x: -10.0,  y: 10.0,  z: 10.0}, Vector3{x: -10.0,  y: -10.0, z: -10.0}],
+            [Vector3{x: 10.0,  y: 10.0,  z: 10.0}, Vector3{x: -10.0, y: 10.0, z: 10.0}, Vector3{x: -10.0,  y: 10.0, z: -10.0}],
+            [Vector3{x: 10.0, y: 10.0, z: -10.0}, Vector3{x: 10.0,  y: 10.0,  z: 10.0}, Vector3{x: -10.0,  y: 10.0, z: -10.0}],
+            [Vector3{x: 10.0,  y: -10.0,  z: 10.0}, Vector3{x: 10.0, y: -10.0, z: -10.0}, Vector3{x: -10.0,  y: -10.0, z: -10.0}],
+            [Vector3{x: 10.0, y: -10.0, z: 10.0}, Vector3{x: -10.0,  y: -10.0,  z: -10.0}, Vector3{x: -10.0,  y: -10.0, z: 10.0}],
+            [Vector3{x: 10.0,  y: -10.0,  z: -10.0}, Vector3{x: -10.0,  y: 10.0, z: -10.0}, Vector3{x: -10.0, y: -10.0, z: -10.0}],
+            [Vector3{x: -10.0, y: 10.0, z: -10.0}, Vector3{x: 10.0,  y: -10.0,  z: -10.0}, Vector3{x: 10.0,  y: 10.0, z: -10.0}],
+        ];
+
+        let colour = Vector3{x: 0.8, y: 0.8, z: 0.0};
+
+        let triangles = vertices.iter().map(| v | Triangle::new(*v, colour, 0.7, 0.1)).collect();
+
+        let spheres = [
+            Sphere {
+                origin: Vector3{x: 0.0, y: -8.0, z: 0.0},
+                colour: Vector3{x: 0.2, y: 0.8, z: 0.8},
+                radius: 2.0,
+                diffuseness: 0.7,
+                specularity: 0.1,
+            },
+            Sphere {
+                origin: Vector3{x: 1.0, y: -4.0, z: 10.0},
+                colour: Vector3{x: 0.2, y: 0.7, z: 0.1},
+                radius: 6.0,
+                diffuseness: 0.7,
+                specularity: 0.1,
+            },
+            Sphere {
+                origin: Vector3{x: 3.0, y: -8.6, z: 2.0},
+                colour: Vector3{x: 0.5, y: 0.4, z: 0.2},
+                radius: 1.4,
+                diffuseness: 0.7,
+                specularity: 0.1,
+            },
+            Sphere {
+                origin: Vector3{x: -4.0, y: -6.8, z: -1.0},
+                colour: Vector3{x: 0.1, y: 0.5, z: 0.15},
+                radius: 3.2,
+                diffuseness: 0.7,
+                specularity: 0.1,
+            },
+            Sphere {
+                origin: Vector3{x: 5.0, y: -9.4, z: 0.5},
+                colour: Vector3{x: 0.7, y: 0.2, z: 0.5},
+                radius: 0.6,
+                diffuseness: 0.7,
+                specularity: 0.1,
+            }
+        ];
+
+        Scene {
+            sun_origin: Vector3{x: 0.0, y: 8.0, z: -7.0},
+            spheres: spheres.to_vec(),
+            triangles: triangles,
+        }
     }
 }
 
 fn main() {
-    let width = 6;
-    let height = 6;
+    let width = 1280;
+    let height = 720;
     let channels = 3;
 
     let field_of_view : f32 = 90.0;
-    let focal_length : f32 = 10.0;
+    let focal_length = (width as f32) / (2.0 * (PI * field_of_view / 360.0).tan());
 
     let mut image : Vec<u8> = Vec::new();
     image.resize(width * height * channels as usize, 0);
