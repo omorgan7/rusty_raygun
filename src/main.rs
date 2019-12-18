@@ -170,57 +170,52 @@ impl Traceable for Triangle {
 
         let edge_ba_bounds : f32 = (self.edge_ba.cross(intersection_point - self.vertices[0])).dot(&self.normal);
         if edge_ba_bounds < 0.0 {
-            // println!("Rejected test1");
             return None;
         }
 
         let edge_cb_bounds : f32 = (self.edge_cb.cross(intersection_point - self.vertices[1])).dot(&self.normal);
         if edge_cb_bounds < 0.0 {
-            // println!("Rejected test2");
             return None;
         }
 
         let edge_ac_bounds : f32 = (self.edge_ac.cross(intersection_point - self.vertices[2])).dot(&self.normal);
         if edge_ac_bounds < 0.0 {
-            // println!("Rejected test3");
             return None;
         }
 
         Some(RayHit::from_intersection(ray_length, intersection_point))
     }
 
-}
+    fn colour(&self, ray_direction: Vector3, hit_position: Vector3, scene: &Scene, objects: &[&dyn Traceable]) -> Vector3 {
 
-impl Sphere {
+        let shadow =  -(hit_position - scene.sun_origin);
+        let ray_direction = shadow.normalised();
+        let ray_length = shadow.length();
 
-    fn ambient_colour(&self) -> Vector3 {
-        let ambient_coefficient = 1.0 - self.diffuseness - self.specularity;
+        let ambient_colour = self.colour * (1.0 - self.diffuseness);
+        for object in objects.iter() {
+            let self_ptr = self as *const Triangle as *const usize;
+            let object_ptr = *object as *const dyn Traceable as *const usize;
 
-        self.colour * ambient_coefficient
-    }
+            if self_ptr == object_ptr {
+                continue;
+            }
 
-    fn colour(&self, ray_direction: Vector3, hit_position: Vector3, scene: &Scene) -> Vector3 {
+            // floating point imprecision fudge
+            let eps : f32 = 1e-2;
 
-        // let ray_direction = (scene.sun_origin - hit_position).normalised();
+            if let Some(hit) = object.trace(hit_position, ray_direction) {
+                if hit.ray_length + eps < ray_length {
+                    return ambient_colour;
+                }
+            }
+        }
 
-        // for sphere in scene.objects.iter() {
-        //     let self_ptr = self as *const Triangle;
-        //     let sphere_ptr = sphere as *const Triangle;
-
-        //     if self_ptr == sphere_ptr {
-        //         continue;
-        //     }
-
-        //     if let Some(_) = sphere.trace(hit_position, ray_direction) {
-        //         return self.ambient_colour();
-        //     }
-        // }
-
-        // let surface_normal = (hit_position - self.origin).normalised();
-        // let diffuse_response = surface_normal.dot(&ray_direction);
-        
-        // Vector3::ones() * diffuse_response + self.ambient_colour()
-        Vector3::ones()
+        let diffuse_response = self.normal.dot(&ray_direction);
+        if (diffuse_response < 0.0) {
+            return ambient_colour;
+        }
+        Vector3::ones() * diffuse_response * self.diffuseness + ambient_colour
     }
 }
 
