@@ -4,3 +4,4 @@
 *.ppm
 *.png
 **/*.rs.bk
+Cargo.lock
