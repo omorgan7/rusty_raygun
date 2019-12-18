@@ -47,12 +47,12 @@ impl Camera {
         focal_length : f32
     ) -> Camera {
 
-        let forward = (camera_origin - look_at).normalised();
+        let forward = (look_at - camera_origin).normalised();
         
         let up = look_up.normalised();
         let left = up.cross(forward).normalised();
 
-        let image_plane_center = camera_origin - forward * focal_length;
+        let image_plane_center = camera_origin + forward * focal_length;
         let image_plane_edge = image_plane_center + left * pixel_width * 0.5 + up * pixel_height * 0.5;
 
         Camera {
