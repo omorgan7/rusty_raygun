@@ -149,10 +149,7 @@ impl Traceable for Triangle {
     fn trace(&self, ray_origin: Vector3, ray_direction: Vector3) -> Option<RayHit> {
         let normal_direction = self.normal.dot(&ray_direction);
 
-        println!("{} {} {} {} {} {}", self.normal.x, self.normal.y, self.normal.z, ray_direction.x, ray_direction.y, ray_direction.z);
         if normal_direction > 0.0 {
-            
-            // println!("Rejected normal");
             return None;
         }
 
@@ -161,7 +158,6 @@ impl Traceable for Triangle {
         let ray_length = (self.plane_offset - normal_origin) / normal_direction;
 
         if ray_length < 0.0 {
-            // println!("Rejected raylength");
             return None;
         }
 
