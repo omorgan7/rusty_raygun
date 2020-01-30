@@ -1,8 +1,5 @@
 extern crate num;
 
-use std::ops;
-use self::num::clamp;
-
 #[derive(Clone, Copy, Debug)]
 pub struct Vector3
 {
@@ -10,6 +7,9 @@ pub struct Vector3
     pub y : f32,
     pub z : f32
 }
+
+use std::ops;
+use self::num::clamp;
 
 impl Vector3 {
     pub fn zeroes() -> Vector3 {
