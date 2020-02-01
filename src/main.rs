@@ -17,6 +17,7 @@ use scene::Scene;
 
 mod traceable;
 use traceable::Traceable;
+use traceable::Triangle;
 use traceable::RandomEngine;
 
 fn write_to_ppm(filename : &str, image : &[u8], width : i32, height : i32) -> std::io::Result<()> {
@@ -78,8 +79,8 @@ impl Camera {
 }
 
 fn main() {
-    let width = 200;
-    let height = 100;
+    let width = 640;
+    let height = 360;
     let channels = 3;
 
     let field_of_view : f32 = 90.0;
@@ -121,26 +122,43 @@ fn main() {
         let mut max_dist = INFINITY;
         let mut object_hit : Option<(&dyn Traceable, Vector3)> = None;
 
+        let eps : f32 = 1e-2;
+
         for object in objects.iter() {
             if let Some(ray_hit) = object.trace(camera.origin, ray_direction) {
-                if ray_hit.ray_length < max_dist {
+                if ray_hit.ray_length + eps < max_dist {
                     max_dist = ray_hit.ray_length;
                     object_hit = Some((*object, ray_hit.intersection_point));
                 }
             }
         }
 
-        let mut colour = Vector3::zeroes();
+        let mut light_hit : Option<(&Triangle)> = None;
 
-        let count = 1000;
-
-        for i in 0..count {
-            if let Some((object, intersection_point)) = object_hit {
-                colour = colour + object.colour(&mut rng, 0, ray_direction, intersection_point, &scene, &objects);
+        for light in scene.lights.iter() {
+            if let Some(ray_hit) = light.trace(camera.origin, ray_direction) {
+                if ray_hit.ray_length + eps < max_dist {
+                    max_dist = ray_hit.ray_length;
+                    light_hit = Some(light);
+                }
             }
         }
 
-        colour = colour / (count as f32);
+        let mut colour = Vector3::zeroes();
+
+        let count = 2000;
+
+        if let Some(light) = light_hit {
+            colour = scene::LIGHT_COLOUR;
+        }
+        else {
+            for _i in 0..count {
+                if let Some((object, intersection_point)) = object_hit {
+                    colour = colour + object.colour(&mut rng, 0, ray_direction, intersection_point, &scene, &objects);
+                }
+            }
+            colour = colour / (count as f32);
+        }
 
         let (r, g, b) = colour.to_rgb();
 

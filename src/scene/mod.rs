@@ -10,6 +10,9 @@ pub struct Scene {
     pub lights: Vec<Triangle>
 }
 
+const LIGHT_INTENSITY : f32 = 20.0;
+pub const LIGHT_COLOUR : Vector3 = Vector3{x: LIGHT_INTENSITY, y: LIGHT_INTENSITY, z: LIGHT_INTENSITY};
+
 impl Scene {
     pub fn new() -> Scene {
 
@@ -28,9 +31,11 @@ impl Scene {
             [Vector3{x: -10.0, y: 10.0, z: -10.0}, Vector3{x: 10.0,  y: -10.0,  z: -10.0}, Vector3{x: 10.0,  y: 10.0, z: -10.0}]
         ];
 
-        let light_verts : [[Vector3; 3]; 1] = [
+        let light_verts : [[Vector3; 3]; 4] = [
             [Vector3{x: 2.0,  y: 9.0,  z: 2.0}, Vector3{x: -2.0, y: 9.0, z: 2.0}, Vector3{x: -2.0,  y: 9.0, z: -2.0}],
-            // [Vector3{x: 2.0, y: 9.0, z: -2.0}, Vector3{x: 2.0,  y: 9.0,  z: 2.0}, Vector3{x: -2.0,  y: 9.0, z: -2.0}]
+            [Vector3{x: -2.0, y: 9.05, z: 2.0}, Vector3{x: 2.0,  y: 9.05,  z: 2.0}, Vector3{x: -2.0,  y: 9.05, z: -2.0}],
+            [Vector3{x: 2.0, y: 9.0, z: -2.0}, Vector3{x: 2.0,  y: 9.0,  z: 2.0}, Vector3{x: -2.0,  y: 9.0, z: -2.0}],
+            [Vector3{x: 2.0,  y: 9.05,  z: 2.0}, Vector3{x: 2.0, y: 9.05, z: -2.0}, Vector3{x: -2.0,  y: 9.05, z: -2.0}]
         ];
 
         let colour = Vector3{x: 0.8, y: 0.8, z: 0.0};

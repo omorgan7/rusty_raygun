@@ -1,11 +1,12 @@
 use scene::Scene;
+use scene::LIGHT_COLOUR;
 use vector3::Vector3;
 use rayhit::RayHit;
 
 use std::f32::INFINITY;
 use std::f32::consts::PI;
 
-static MAX_ITERATIONS : i32 = 3;
+static MAX_ITERATIONS : i32 = 6;
 
 use rand::Rng;
 use rand::rngs::ThreadRng;
@@ -15,7 +16,7 @@ pub struct RandomEngine {
 }
 
 impl RandomEngine {
-    pub fn hemispherical_ray(&mut self, centre: Vector3, normal: Vector3) -> Vector3 {
+    pub fn hemispherical_ray(&mut self, normal: Vector3) -> Vector3 {
 
         let nz = normal;
         let nx = (if (nz.x).abs() > (nz.y).abs() { Vector3{x: nz.z, y: 0.0, z: -nz.x} } else { Vector3{x: 0.0, y: -nz.z, z: nz.y} }).normalised();
@@ -28,6 +29,30 @@ impl RandomEngine {
         let sin_theta = (1.0 - u1 * u1).sqrt();
 
         let random = Vector3{x: sin_theta * phi.cos(), y: u1, z: sin_theta * phi.sin()};
+
+        Vector3 {
+            x: random.x * nx.x + random.y * nz.x + random.z * ny.x,
+            y: random.x * nx.y + random.y * nz.y + random.z * ny.y,
+            z: random.x * nx.z + random.y * nz.z + random.z * ny.z,
+        }
+    }
+
+    pub fn cosine_ray(&mut self, normal: Vector3) -> Vector3 {
+        let nz = normal;
+        let nx = (if (nz.x).abs() > (nz.y).abs() { Vector3{x: nz.z, y: 0.0, z: -nz.x} } else { Vector3{x: 0.0, y: -nz.z, z: nz.y} }).normalised();
+        let ny = nz.cross(nx);
+
+        let u1 : f32 = self.rng.gen();
+        let u2 : f32 = self.rng.gen();
+
+        let phi = 2.0 * PI * u1;
+        let one_minus_u2_sqrt = (1.0 - u2).sqrt();
+
+        let random = Vector3{
+            x: phi.cos() * one_minus_u2_sqrt,
+            y: u2.sqrt(),
+            z: phi.sin() * one_minus_u2_sqrt
+        };
 
         Vector3 {
             x: random.x * nx.x + random.y * nz.x + random.z * ny.x,
@@ -69,6 +94,16 @@ pub struct Sphere {
     pub radius : f32
 }
 
+trait Colourable {
+   fn colour(&self) -> Vector3;
+}
+
+impl Colourable for Sphere {
+    fn colour(&self) -> Vector3 { return self.colour;}
+}
+impl Colourable for Triangle {
+    fn colour(&self) -> Vector3 { return self.colour;}
+}
 
 impl Triangle {
     pub fn new(vertices : [Vector3; 3], colour : Vector3) -> Triangle {
@@ -138,71 +173,7 @@ impl Traceable for Triangle {
     fn colour(&self, rng : &mut RandomEngine, iteration : i32, ray_direction: Vector3, hit_position: Vector3, scene: &Scene, objects: &[&dyn Traceable]) -> Vector3 {
 
         let surface_normal = self.normal;
-        let shadow = rng.hemispherical_ray(hit_position, surface_normal);
-
-        let colour = self.colour;
-
-        let eps : f32 = 1e-2;
-
-        // intersect with the nearest light
-        let mut light_length : f32 = INFINITY;
-        let mut light_hit : Option<(&dyn Traceable, Vector3)> = None;
-
-        for light in scene.lights.iter() {
-            if let Some(hit) = light.trace(hit_position, shadow) {
-                if hit.ray_length + eps < light_length {
-                    light_length = hit.ray_length;
-
-                    // lights don't have different colour or intensity for now.
-                    light_hit = Some((light, Vector3::ones() * 100.0));
-                }
-            }
-        }
-
-        let mut object_length : f32 = INFINITY;
-        let mut object_hit : Option<(&dyn Traceable, Vector3)> = None;
-
-        for object in objects.iter() {
-            let self_ptr = self as *const Triangle as *const usize;
-            let object_ptr = *object as *const dyn Traceable as *const usize;
-
-            if self_ptr == object_ptr {
-                continue;
-            }
-
-            if let Some(hit) = object.trace(hit_position, shadow) {
-                if hit.ray_length + eps < object_length {
-                    object_length = hit.ray_length;
-
-                    // lights don't have different colour or intensity for now.
-                    object_hit = Some((*object, hit.intersection_point));
-                }
-            }
-        }
-
-        if iteration == MAX_ITERATIONS {
-            // our scene is a closed system
-            // so this _should_ be impossible.
-            // convert to assertion later on.
-            return Vector3::zeroes();
-        }
-
-        if let Some((light, colour)) = light_hit {
-            if light_length < object_length {
-                return colour;
-            }
-        }
-
-        match object_hit {
-            None => {
-                return Vector3::zeroes();
-            }
-
-            Some((object, new_hit_position)) => {
-                let diffuse_response =  self.colour * 0.5 * surface_normal.dot(&shadow);
-                self.colour(rng, iteration + 1, shadow, new_hit_position, scene, objects) * diffuse_response
-            }
-        }
+        colour(self, surface_normal, rng, iteration, ray_direction, hit_position, scene, objects)
     }
 }
 
@@ -233,71 +204,77 @@ impl Traceable for Sphere {
 
     fn colour(&self, rng : &mut RandomEngine, iteration : i32, ray_direction: Vector3, hit_position: Vector3, scene: &Scene, objects: &[&dyn Traceable]) -> Vector3 {
 
-        let surface_normal = (self.origin - hit_position).normalised();
-        let shadow = rng.hemispherical_ray(hit_position, surface_normal);
+        let surface_normal = (hit_position - self.origin).normalised();
+        // let shadow = rng.cosine_ray(ray_direction);
+        colour(self, surface_normal, rng, iteration, ray_direction, hit_position, scene, objects)
+    }
+}
 
-        let colour = self.colour;
+fn colour<T : Colourable>(this: &T, surface_normal : Vector3, rng : &mut RandomEngine, iteration : i32, ray_direction: Vector3, hit_position: Vector3, scene: &Scene, objects: &[&dyn Traceable]) -> Vector3 {
 
-        let eps : f32 = 1e-2;
+    if iteration == MAX_ITERATIONS {
+        // our scene is a closed system
+        // so this _should_ be impossible.
+        // convert to assertion later on.
+        return Vector3::zeroes();
+    }
 
-        // intersect with the nearest light
-        let mut light_length : f32 = INFINITY;
-        let mut light_hit : Option<(&dyn Traceable, Vector3)> = None;
+    // ray direction currently unused - will be used for specularity/BDRF eventually.
+    // let shadow = rng.cosine_ray(ray_direction);
+    let shadow = rng.hemispherical_ray(surface_normal);
 
-        for light in scene.lights.iter() {
-            if let Some(hit) = light.trace(hit_position, shadow) {
-                if hit.ray_length + eps < light_length {
-                    light_length = hit.ray_length;
+    let eps : f32 = 1e-2;
 
-                    // lights don't have different colour or intensity for now.
-                    light_hit = Some((light, Vector3::ones() * 100.0));
-                }
+    // intersect with the nearest light
+    let mut light_length : f32 = INFINITY;
+    let mut light_hit : Option<Vector3> = None;
+
+    for light in scene.lights.iter() {
+        if let Some(hit) = light.trace(hit_position, shadow) {
+            if hit.ray_length + eps < light_length {
+                light_length = hit.ray_length;
+
+                // lights don't have different colour or intensity for now.
+                light_hit = Some(LIGHT_COLOUR);
             }
         }
+    }
 
-        let mut object_length : f32 = INFINITY;
-        let mut object_hit : Option<(&dyn Traceable, Vector3)> = None;
+    let mut object_length : f32 = INFINITY;
+    let mut object_hit : Option<(&dyn Traceable, Vector3)> = None;
 
-        for object in objects.iter() {
-            let self_ptr = self as *const Sphere as *const usize;
-            let object_ptr = *object as *const dyn Traceable as *const usize;
+    for object in objects.iter() {
+        let this_ptr = this as *const T as *const usize;
+        let object_ptr = *object as *const dyn Traceable as *const usize;
 
-            if self_ptr == object_ptr {
-                continue;
-            }
-
-            if let Some(hit) = object.trace(hit_position, shadow) {
-                if hit.ray_length + eps < object_length {
-                    object_length = hit.ray_length;
-
-                    // lights don't have different colour or intensity for now.
-                    object_hit = Some((*object, hit.intersection_point));
-                }
-            }
+        if this_ptr == object_ptr {
+            continue;
         }
 
-        if iteration == MAX_ITERATIONS {
-            // our scene is a closed system
-            // so this _should_ be impossible.
-            // convert to assertion later on.
+        if let Some(hit) = object.trace(hit_position, shadow) {
+            if hit.ray_length + eps < object_length {
+                object_length = hit.ray_length;
+
+                // lights don't have different colour or intensity for now.
+                object_hit = Some((*object, hit.intersection_point));
+            }
+        }
+    }
+
+    if let Some(colour) = light_hit {
+        if light_length < object_length {
+            return colour;
+        }
+    }
+
+    match object_hit {
+        None => {
             return Vector3::zeroes();
         }
 
-        if let Some((light, colour)) = light_hit {
-            if light_length < object_length {
-                return colour;
-            }
-        }
-
-        match object_hit {
-            None => {
-                return Vector3::zeroes();
-            }
-
-            Some((object, new_hit_position)) => {
-                let diffuse_response =  self.colour * 0.5 * surface_normal.dot(&shadow);
-                self.colour(rng, iteration + 1, shadow, new_hit_position, scene, objects) * diffuse_response
-            }
+        Some((object, new_hit_position)) => {
+            let diffuse_response =  this.colour() * 0.5 * surface_normal.dot(&shadow);
+            object.colour(rng, iteration + 1, shadow, new_hit_position, scene, objects) * diffuse_response
         }
     }
 }
