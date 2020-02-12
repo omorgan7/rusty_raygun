@@ -19,6 +19,7 @@ mod traceable;
 use traceable::Traceable;
 use traceable::Triangle;
 use traceable::RandomEngine;
+use traceable::Rng;
 
 fn write_to_ppm(filename : &str, image : &[u8], width : i32, height : i32) -> std::io::Result<()> {
 
@@ -109,7 +110,7 @@ fn main() {
 
     let thread_count : usize = 8;
 
-    let mut rng = RandomEngine{rng: rand::thread_rng()};
+    let mut rng = RandomEngine{rng: Rng::new(0)};
 
     for pixel_count in (0..(width * height * channels)).step_by(channels) {
         let x = ((pixel_count / channels) % width) as f32;
@@ -146,9 +147,9 @@ fn main() {
 
         let mut colour = Vector3::zeroes();
 
-        let count = 2000;
+        let count = 100;
 
-        if let Some(light) = light_hit {
+        if let Some(_) = light_hit {
             colour = scene::LIGHT_COLOUR;
         }
         else {
